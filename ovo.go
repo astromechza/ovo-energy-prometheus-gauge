@@ -22,10 +22,6 @@ type Ovo struct {
 	GaugeCache map[string]prometheus.Gauge
 }
 
-type SupplyPointInfo struct {
-	Msn string `json:"msn"`
-}
-
 type SupplyPoint struct {
 	Mpxn  string `json:"mpxn"`
 	Fuel  string `json:"fuel"`
