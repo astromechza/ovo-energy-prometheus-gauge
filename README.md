@@ -28,3 +28,74 @@ By default, this will poll the last readings every 30 minutes.
 
 You can use the Dockerfile to produce a container image: `docker build .` but an initial release of this has been pushed
 to `docker.io/astromechza/ovo-energy-prometheus-gauge:4cca4fa`.
+
+## Example kubectl apply
+
+First create a secret with your ovo details:
+
+```shell
+echo '{"accountNumber": "12345678", "username": "user@example.com", "password": "xxx"}' jq | \
+    kubectl create secret generic ovo-energy-account --namespace default --from-file=config.json=/dev/stdin
+```
+
+And then apply the following
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ovo-energy-prometheus-gauge
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ovo-energy-prometheus-gauge
+  template:
+    metadata:
+      labels:
+        app: ovo-energy-prometheus-gauge
+    spec:
+      containers:
+      - name: ovo-energy-prometheus-gauge
+        image: docker.io/astromechza/ovo-energy-prometheus-gauge:latest
+        args: ["-config", "/config/config.json", "-interval", "30m"]
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          readOnlyRootFilesystem: true
+        ports:
+        - name: http
+          containerPort: 8080
+        readinessProbe:
+          httpGet:
+              path: /metrics
+              port: 8080
+        volumeMounts:
+          - name: config
+            mountPath: /config
+            readOnly: true
+      volumes:
+        - name: config
+          secret:
+            secretName: ovo-energy-account
+```
+
+And a pod-monitor to watch it
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: ovo-energy-prometheus-gauge-monitor
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: ovo-energy-prometheus-gauge
+  namespaceSelector:
+    matchNames:
+      - example
+  podMetricsEndpoints:
+    - port: http
+```

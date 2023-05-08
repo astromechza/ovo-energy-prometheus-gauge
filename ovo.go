@@ -61,34 +61,64 @@ func (o *Ovo) Scan() error {
 		o.GaugeCache = make(map[string]prometheus.Gauge)
 	}
 
-	if !o.LoggedIn {
-		zap.S().Info("attempting to log in")
-		// attempt to log in
-		data, _ := json.Marshal(map[string]interface{}{
-			"username":         o.AccountInfo.Username,
-			"password":         o.AccountInfo.Password,
-			"rememberMe":       false,
-			"refreshTokenType": "",
-		})
-		req, _ := http.NewRequest(http.MethodPost, "https://my.ovoenergy.com/api/v2/auth/login", bytes.NewBuffer(data))
-		req.Header.Set("content-type", "application/json")
-		resp, err := o.Client.Do(req)
-		if err != nil {
-			return fmt.Errorf("failed to login to ovo: %v", err.Error())
+	var lastErr error
+	for i := 0; i < 3; i++ {
+		if lastErr != nil {
+			time.Sleep(time.Second * 3)
+			zap.S().Warnf("retrying due to error: %v", lastErr)
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			data, _ = io.ReadAll(resp.Body)
-			return fmt.Errorf("failed to login to ovo: %v %v", resp.StatusCode, string(data))
+		if !o.LoggedIn {
+			if err := o.Login(); err != nil {
+				return fmt.Errorf("failed to login to ovo: %v", err)
+			}
 		}
-		zap.S().Info("successfully logged in")
-		o.LoggedIn = true
+		if points, err := o.LoadPoints(); err != nil {
+			lastErr = fmt.Errorf("failed to load points: %v", err)
+			continue
+		} else {
+			for _, point := range points {
+				if err = o.ScanPoint(&point); err != nil {
+					lastErr = fmt.Errorf("failed to scan point: %v", err)
+					continue
+				}
+			}
+			lastErr = nil
+			break
+		}
 	}
+	return lastErr
+}
 
+func (o *Ovo) Login() error {
+	zap.S().Info("attempting to log in")
+	// attempt to log in
+	data, _ := json.Marshal(map[string]interface{}{
+		"username":         o.AccountInfo.Username,
+		"password":         o.AccountInfo.Password,
+		"rememberMe":       false,
+		"refreshTokenType": "",
+	})
+	req, _ := http.NewRequest(http.MethodPost, "https://my.ovoenergy.com/api/v2/auth/login", bytes.NewBuffer(data))
+	req.Header.Set("content-type", "application/json")
+	resp, err := o.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to make request: %v", err.Error())
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		data, _ = io.ReadAll(resp.Body)
+		return fmt.Errorf("login request failed: %v %v", resp.StatusCode, string(data))
+	}
+	zap.S().Info("successfully logged in")
+	o.LoggedIn = true
+	return nil
+}
+
+func (o *Ovo) LoadPoints() ([]SupplyPoint, error) {
 	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("https://smartpaymapi.ovoenergy.com/orex/api/supply-points/account/%v", o.AccountInfo.AccountNumber), nil)
 	resp, err := o.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to list supply points: %v", err.Error())
+		return nil, fmt.Errorf("failed to make request: %v", err.Error())
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -96,22 +126,15 @@ func (o *Ovo) Scan() error {
 			o.LoggedIn = false
 		}
 		data, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to query supply point: %v %v", resp.StatusCode, string(data))
+		return nil, fmt.Errorf("supply points query failed: %v %v", resp.StatusCode, string(data))
 	}
 
 	points := make([]SupplyPoint, 0)
 	if err = json.NewDecoder(resp.Body).Decode(&points); err != nil {
-		return fmt.Errorf("failed to decode supply point data: %v", err)
+		return nil, fmt.Errorf("failed to decode supply point data: %v", err)
 	}
 	zap.S().Debugw("scanned points", "points", points)
-
-	for _, point := range points {
-		if err = o.ScanPoint(&point); err != nil {
-			return fmt.Errorf("failed to scan point: %v", err)
-		}
-	}
-
-	return nil
+	return points, nil
 }
 
 func (o *Ovo) ScanPoint(point *SupplyPoint) error {
