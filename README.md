@@ -26,8 +26,7 @@ If running in Kubernetes, use a secret to store and mount this file.
 
 By default, this will poll the last readings every 30 minutes.
 
-You can use the Dockerfile to produce a container image: `docker build .` but an initial release of this has been pushed
-to `docker.io/astromechza/ovo-energy-prometheus-gauge:latest`.
+The image is pushed to Dockerhub. Choose the latest release here: https://hub.docker.com/r/astromechza/ovo-energy-prometheus-gauge/tags.
 
 ## Example kubectl apply
 
@@ -58,7 +57,7 @@ spec:
     spec:
       containers:
       - name: ovo-energy-prometheus-gauge
-        image: docker.io/astromechza/ovo-energy-prometheus-gauge:latest
+        image: docker.io/astromechza/ovo-energy-prometheus-gauge:v1.0.1
         args: ["-config", "/config/config.json", "-interval", "30m"]
         securityContext:
           runAsNonRoot: true

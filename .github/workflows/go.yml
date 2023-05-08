@@ -40,14 +40,10 @@ jobs:
       - uses: paulhatch/semantic-version@v5.0.2
         id: semver
         with:
-          # The prefix to use to identify tags
           tag_prefix: "v"
-          # A string which, if present in a git commit, indicates that a change represents a
-          # major (breaking) change, supports regular expressions wrapped with '/'
+          bump_each_commit: true
           major_pattern: "(MAJOR)"
-          # Same as above except indicating a minor change, supports regular expressions wrapped with '/'
           minor_pattern: "(MINOR)"
-          # A string to determine the format of the version output
           version_format: "${major}.${minor}.${patch}"
 
       - name: Login to Docker Hub
