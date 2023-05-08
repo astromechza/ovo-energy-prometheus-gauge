@@ -57,6 +57,4 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           push: true
-          tags:
-            - docker.io/astromechza/ovo-energy-prometheus-gauge:latest
-            - docker.io/astromechza/ovo-energy-prometheus-gauge:${{ steps.semver.outputs.version_tag }}
+          tags: docker.io/astromechza/ovo-energy-prometheus-gauge:${{ steps.semver.outputs.version_tag }}
